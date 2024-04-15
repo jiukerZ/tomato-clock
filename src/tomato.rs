@@ -3,7 +3,7 @@ use std::{collections::HashMap, future::Future};
 
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::utils::{now, exec_plugins};
+use crate::utils::{exec_plugins, now, run_with_reset, run_with_work, setup};
 
 pub enum TomatoStatus {
     Work,
@@ -16,9 +16,24 @@ pub enum TomatoStatus {
 pub enum TomatoHook {
     BeforeSetup,
     Setup,
+    BeforeWork,
+    Work,
+    BeforeReset,
+    Reset
 }
 
 type Plugin =Box<dyn Fn(& Tomato, TomatoHook)>;
+
+pub struct TomatoConfig {
+    /// 工作时长（分钟）
+    pub work_time_min: u64,
+
+    /// 休息时长（分钟）
+    pub reset_time_min: u64,
+
+    /// 定时器轮询时间（秒），默认是2秒
+    pub run_interval_sec: u64
+}
 
 pub struct Tomato {
     pub status: TomatoStatus,
@@ -37,7 +52,9 @@ pub struct Tomato {
 
     pub resume_at: String,
 
-    pub plugins: HashMap<TomatoHook, Vec<Plugin>>
+    pub plugins: HashMap<TomatoHook, Vec<Plugin>>,
+
+    pub config: TomatoConfig,
 }
 
 impl Tomato {
@@ -55,6 +72,11 @@ impl Tomato {
             reset_at: "".to_string(),
             block_at: "".to_string(),
             resume_at: "".to_string(),
+            config: TomatoConfig {
+                work_time_min: 25,
+                reset_time_min: 5,
+                run_interval_sec: 2
+            }
         }
     }
 }
@@ -65,18 +87,20 @@ pub trait TomatoPlayer {
     async fn run(&mut self);
 
     fn add_plugin(&mut self, plugin_tuple: (TomatoHook, Vec<Plugin>)) -> usize;
-
-    fn setup(&mut self);
 }
 
 impl TomatoPlayer for Tomato {
     async fn run(&mut self) {
         match self.status {
             TomatoStatus::Wait => {
-                self.setup();
+                setup(self);
             },
-            TomatoStatus::Work => todo!(),
-            TomatoStatus::Reset => todo!(),
+            TomatoStatus::Work => {
+                let _ = run_with_work(self);
+            },
+            TomatoStatus::Reset => {
+                let _ = run_with_reset(self);
+            },
             TomatoStatus::Block => todo!(),
         }
     }
@@ -91,11 +115,5 @@ impl TomatoPlayer for Tomato {
         };
         self.plugins.len()
     }
-
-    fn setup(&mut self) {
-        exec_plugins(self, TomatoHook::BeforeSetup);
-        self.status = TomatoStatus::Work;
-        self.setup_at = now();
-        exec_plugins(self, TomatoHook::Setup);
-    }
 }
+

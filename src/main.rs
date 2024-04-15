@@ -21,7 +21,12 @@ async fn main() {
         println!("Tomato setup!")
     };
     let len = tomato.add_plugin((TomatoHook::Setup, vec![Box::new(p)]));
-    let mut interval = time::interval(time::Duration::from_secs(2));
+
+    ctrlc::set_handler(|| {
+        println!("Press ctrl+c!")
+    }).expect("Error setting Ctrl-C handler");
+
+    let mut interval = time::interval(time::Duration::from_secs(tomato.config.run_interval_sec));
     {
         loop {
             interval.tick().await;
