@@ -1,11 +1,13 @@
 mod tomato;
 mod utils;
 
-use clap::Parser;
-use tokio::{self, runtime::Runtime, time::{self, Duration, Instant}};
+use std::{process, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 
-use tomato::{Tomato, TomatoHook, TomatoPlayer};
-use utils::now;
+use clap::Parser;
+use tokio::{self, runtime::Runtime, sync::Mutex, time::{self, Duration, Instant} };
+
+use tomato::{Tomato, TomatoHook, TomatoPlayer, TomatoStatus};
+use utils::{handle_block, exit_process};
 
 
 #[derive(Parser)]
@@ -16,21 +18,24 @@ struct Cli;
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    let mut tomato = Tomato::new();
-    let p = |t: &Tomato, h: TomatoHook| {
-        println!("Tomato setup!")
-    };
-    let len = tomato.add_plugin((TomatoHook::Setup, vec![Box::new(p)]));
+    let tomato = Arc::new(Mutex::new(Tomato::new()));
+    let config = tomato.lock().await.config;
+    let tomato_clone = Arc::clone(&tomato);
 
-    ctrlc::set_handler(|| {
-        println!("Press ctrl+c!")
-    }).expect("Error setting Ctrl-C handler");
+    tokio::spawn(async move  {
+        tokio::signal::ctrl_c().await.unwrap();
+        let mut lock = tomato_clone.lock().await;
+        if lock.status == TomatoStatus::Block {
+            exit_process();
+        }
+        handle_block(&mut lock);
+    });
 
-    let mut interval = time::interval(time::Duration::from_secs(tomato.config.run_interval_sec));
+    let mut interval = time::interval(time::Duration::from_secs(config.run_interval_sec + 10));
     {
         loop {
             interval.tick().await;
-            tomato.run().await;
+            tomato.lock().await.run().await;
         }
     }
 }

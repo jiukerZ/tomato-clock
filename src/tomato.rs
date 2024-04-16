@@ -1,10 +1,12 @@
 
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap, future::Future, sync::Arc};
 
 use strum::{EnumIter, IntoEnumIterator};
+use tokio::sync::Mutex;
 
-use crate::utils::{exec_plugins, now, run_with_reset, run_with_work, setup};
+use crate::utils::{exec_plugins, now, run_with_reset, handle_run, setup};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TomatoStatus {
     Work,
     Reset,
@@ -19,11 +21,13 @@ pub enum TomatoHook {
     BeforeWork,
     Work,
     BeforeReset,
-    Reset
+    Reset,
+    Block
 }
 
-type Plugin =Box<dyn Fn(& Tomato, TomatoHook)>;
+type Plugin =Box<dyn Fn(& Tomato, TomatoHook) + Send + Sync + 'static >;
 
+#[derive(Clone, Copy)]
 pub struct TomatoConfig {
     /// 工作时长（分钟）
     pub work_time_min: u64,
@@ -52,6 +56,8 @@ pub struct Tomato {
 
     pub resume_at: String,
 
+    pub block_from: Option<TomatoStatus>,
+
     pub plugins: HashMap<TomatoHook, Vec<Plugin>>,
 
     pub config: TomatoConfig,
@@ -72,6 +78,7 @@ impl Tomato {
             reset_at: "".to_string(),
             block_at: "".to_string(),
             resume_at: "".to_string(),
+            block_from: None,
             config: TomatoConfig {
                 work_time_min: 25,
                 reset_time_min: 5,
@@ -96,12 +103,12 @@ impl TomatoPlayer for Tomato {
                 setup(self);
             },
             TomatoStatus::Work => {
-                let _ = run_with_work(self);
+                handle_run(self, TomatoStatus::Work, TomatoStatus::Work);
             },
             TomatoStatus::Reset => {
-                let _ = run_with_reset(self);
+                handle_run(self, TomatoStatus::Reset, TomatoStatus::Reset);
             },
-            TomatoStatus::Block => todo!(),
+            _ => {}
         }
     }
 

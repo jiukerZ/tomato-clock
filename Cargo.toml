@@ -9,5 +9,8 @@ description = "The Tomato Clock program  running in the terminal."
 chrono = "0.4.37"
 clap = { version = "4.5.4", features = ["derive"] }
 ctrlc = "3.4.4"
+exitcode = "1.1.2"
+indicatif = "0.17.8"
+inquire = "0.7.4"
 strum = { version = "0.26.2", features = ["derive"] }
-tokio = { version = "1.37.0", features = ["time", "rt","macros", "rt-multi-thread"] }
+tokio = { version = "1.37.0", features = ["time", "rt","macros", "rt-multi-thread", "sync", "signal"] }
